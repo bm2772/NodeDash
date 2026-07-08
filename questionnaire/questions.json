@@ -1,0 +1,130 @@
+{
+  "questionnaire_name": "AgentGraph Onboarding Interview",
+  "version": "0.1",
+  "description": "Guided, adaptive AI interview with the admin. Answers are compiled directly into the workspace graph spec (workspace, nodes, edges, agent_guardrails) — not stored as prose. Capped at 5-8 questions for the MVP; the interviewer asks follow-ups based on prior answers and can pre-fill from ingested data (org-chart CSV, HR export).",
+  "output_format": "See schema/graph-spec.schema.json — the compiled output must match the workspace/nodes/edges/agent_guardrails structure.",
+  "tiers": [
+    {
+      "tier_id": "tier_1_macro",
+      "title": "Macro: defining the graph",
+      "maps_to": "workspace",
+      "questions": [
+        {
+          "question_id": "q_industry_output",
+          "question": "What is the primary product or service your company delivers?",
+          "generates": "Domain context injected into every agent prompt; shared vocabulary across the board",
+          "output_fields": ["workspace.workspace_name", "workspace.industry"]
+        },
+        {
+          "question_id": "q_global_objective",
+          "question": "In one sentence, what is the end-to-end objective of an operational cycle, and what is your standard delivery timeline (SLA in days)?",
+          "generates": "The global objective every agent optimizes toward and the master SLA",
+          "output_fields": ["workspace.global_objective", "workspace.standard_sla_days"]
+        },
+        {
+          "question_id": "q_operational_stages",
+          "question": "Break your delivery process into 3-5 major phases (e.g. sourcing, assembly, quality assurance, distribution).",
+          "generates": "The top-level structure of the graph (clusters / swimlanes)",
+          "output_fields": ["workspace (stage clustering for node layout)"]
+        },
+        {
+          "question_id": "q_bottlenecks",
+          "question": "Where does friction, delay, or communication breakdown historically occur in your process?",
+          "generates": "High-risk edges flagged for extra monitoring; priority alerting at the agents sitting on them",
+          "output_fields": ["edges (high-risk flags)", "agent_guardrails"]
+        }
+      ]
+    },
+    {
+      "tier_id": "tier_2_micro",
+      "title": "Micro: defining the nodes (actors)",
+      "maps_to": "nodes",
+      "questions": [
+        {
+          "question_id": "q_internal_teams",
+          "question": "Which key departments or teams are involved in the operational lifecycle?",
+          "generates": "Internal nodes",
+          "output_fields": ["nodes[].node_id", "nodes[].name", "nodes[].type = internal", "nodes[].responsibilities"]
+        },
+        {
+          "question_id": "q_external_partners",
+          "question": "Which outside entities (vendors, suppliers, contractors) need access to the workspace?",
+          "generates": "External nodes (restricted visibility by default)",
+          "output_fields": ["nodes[].node_id", "nodes[].name", "nodes[].type = external"]
+        },
+        {
+          "question_id": "q_capacity_constraints",
+          "question": "For each role, what capacity limits or constraints apply? (e.g. vendors juggle multiple clients; Finance needs 48 hours to approve)",
+          "generates": "Each node's constraint model, consumed by its agent for scheduling",
+          "output_fields": ["nodes[].constraints"]
+        },
+        {
+          "question_id": "q_people_to_seats",
+          "question": "Who fills each role? (names/emails per seat, or upload an org-chart CSV / HR export)",
+          "generates": "Individual employee provisioning (scoped logins) — the layer that makes each person's platform their own",
+          "output_fields": ["nodes[] (seat provisioning metadata)"]
+        }
+      ]
+    },
+    {
+      "tier_id": "tier_3_workflow",
+      "title": "Workflow & dependencies: defining the edges",
+      "maps_to": "edges",
+      "questions": [
+        {
+          "question_id": "q_trigger",
+          "question": "What action kicks off a new operational cycle? (e.g. contract signed, inventory below threshold)",
+          "generates": "The entry event/edge that instantiates a workflow",
+          "output_fields": ["workspace.trigger_event"]
+        },
+        {
+          "question_id": "q_approval_chains",
+          "question": "For each major action: who proposes it, who approves it, and who executes it?",
+          "generates": "Directed edges with approval semantics",
+          "output_fields": ["edges[].source_node_id", "edges[].target_node_id", "edges[].action_type"]
+        },
+        {
+          "question_id": "q_data_handoffs",
+          "question": "When one team hands off to another, what documents or data must accompany the handoff?",
+          "generates": "The required-payload schema on each edge",
+          "output_fields": ["edges[].required_data_payload"]
+        }
+      ]
+    },
+    {
+      "tier_id": "tier_4_agency",
+      "title": "AI agency & guardrails: defining the agents",
+      "maps_to": "nodes[].autonomy_level, nodes[].agent_system_prompt, agent_guardrails",
+      "questions": [
+        {
+          "question_id": "q_autonomy_level",
+          "question": "For each node's agent: may it auto-approve/execute standard requests, or only draft suggestions for human approval?",
+          "generates": "Per-agent permission setting",
+          "output_fields": ["nodes[].autonomy_level"],
+          "allowed_values": ["suggest_only", "execute", "restricted"]
+        },
+        {
+          "question_id": "q_external_visibility",
+          "question": "How much internal data can an external partner's agent see — only its assigned deadlines, or your internal ones too?",
+          "generates": "Per-agent data-scope / visibility policy",
+          "output_fields": ["agent_guardrails.vendor_data_transparency"],
+          "allowed_values": ["strict_isolation", "shared_deadlines", "full_transparency"]
+        },
+        {
+          "question_id": "q_exception_handling",
+          "question": "What is the protocol when a deadline is missed? (auto-renegotiate, alert the human, halt downstream work)",
+          "generates": "Per-agent exception routine",
+          "output_fields": ["agent_guardrails.delay_handling_protocol"],
+          "allowed_values": ["auto-renegotiate-then-alert", "alert-human-only", "halt-downstream"]
+        },
+        {
+          "question_id": "q_communication_tone",
+          "question": "What tone should agents use when communicating across teams and with external partners?",
+          "generates": "Shared communication style for all agent messages",
+          "output_fields": ["agent_guardrails.communication_tone"],
+          "allowed_values": ["professional_and_concise", "friendly_and_detailed", "formal"]
+        }
+      ]
+    }
+  ]
+}

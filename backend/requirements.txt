@@ -1,0 +1,8 @@
+# NodeDash / AgentGraph backend — deliberately light on native deps
+fastapi>=0.110
+uvicorn>=0.27
+sqlalchemy>=2.0
+httpx>=0.27
+# pydantic is pulled in by fastapi (v2). No passlib/jose/jsonschema:
+#   - auth uses stdlib PBKDF2 + HS256 JWT (app/security.py)
+#   - graph validation is self-contained (app/graph_spec.py)

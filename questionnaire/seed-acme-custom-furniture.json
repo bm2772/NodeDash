@@ -1,0 +1,97 @@
+{
+  "workspace": {
+    "workspace_name": "Acme Custom Furniture Operations",
+    "industry": "Custom Furniture Manufacturing",
+    "global_objective": "Source raw materials, assemble, quality-check, and deliver custom furniture within the standard SLA.",
+    "trigger_event": "New Client Contract Signed",
+    "standard_sla_days": 14
+  },
+  "nodes": [
+    {
+      "node_id": "node_procurement_internal",
+      "name": "Procurement",
+      "type": "internal",
+      "responsibilities": [
+        "Source raw materials",
+        "Draft purchase orders and proposals",
+        "Manage multiple concurrent vendors",
+        "Track vendor delivery timelines"
+      ],
+      "constraints": [
+        "Manages multiple concurrent vendors",
+        "Purchase orders require Finance approval before release"
+      ],
+      "autonomy_level": "suggest_only",
+      "agent_system_prompt": "You are the AI Chief of Staff for Procurement (Procurement Manager). Your responsibilities are sourcing raw materials, drafting purchase orders, and tracking vendor timelines across multiple concurrent vendors. You coordinate downstream with the Finance agent for approvals and with the Oakline Timber vendor agent for orders. Your autonomy is draft-only: prepare purchase orders and vendor proposals, but wait for human confirmation before anything is sent. You have full internal data visibility. When the vendor agent reports a checkpoint delay, recompute the affected timelines, alert your human, and automatically update the Finance agent on shifting invoice timelines."
+    },
+    {
+      "node_id": "node_finance_internal",
+      "name": "Finance",
+      "type": "internal",
+      "responsibilities": [
+        "Approve purchase orders submitted by Procurement",
+        "Process vendor invoices",
+        "Maintain budget projections"
+      ],
+      "constraints": [
+        "Approval SLA is 48 hours",
+        "Purchase order and invoice data must match before payment"
+      ],
+      "autonomy_level": "execute",
+      "agent_system_prompt": "You are the AI Chief of Staff for Finance (Finance Team). Your responsibilities are approving purchase orders and processing vendor invoices within a 48-hour approval SLA. You coordinate upstream with the Procurement agent, which submits proposals for approval. Your autonomy is auto-approve-standard: approve standard purchase orders automatically when the PO and vendor details are complete and within budget; escalate anything non-standard to your human. You have full internal data visibility. When Procurement notifies you of a vendor delay, recalculate invoice timelines and budget projections and alert your human manager."
+    },
+    {
+      "node_id": "node_vendor_oakline_external",
+      "name": "Oakline Timber",
+      "type": "external",
+      "responsibilities": [
+        "Fulfill raw material orders",
+        "Report shipment checkpoints",
+        "Provide revised ETAs when timelines shift"
+      ],
+      "constraints": [
+        "Serves multiple concurrent clients",
+        "Can only see its own assigned deadlines, not Acme internal deadlines"
+      ],
+      "autonomy_level": "restricted",
+      "agent_system_prompt": "You are the AI assistant for Oakline Timber, an external raw material vendor. You manage this vendor's deliveries for Acme Custom Furniture while the vendor juggles multiple concurrent clients. Your data visibility is restricted to your assigned delivery deadlines only — you cannot see Acme's internal deadlines or master project schedule. When your human updates a shipping checkpoint, format the shipment status and revised ETA and send them to the Procurement agent. If a delivery will slip, auto-renegotiate a new timeline with the Procurement agent, rebalancing around your other active jobs."
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "edge_procurement_to_finance_approval",
+      "source_node_id": "node_procurement_internal",
+      "target_node_id": "node_finance_internal",
+      "action_type": "request_approval",
+      "required_data_payload": [
+        "Purchase Order",
+        "Vendor Details"
+      ]
+    },
+    {
+      "edge_id": "edge_procurement_to_vendor_order",
+      "source_node_id": "node_procurement_internal",
+      "target_node_id": "node_vendor_oakline_external",
+      "action_type": "send_order",
+      "required_data_payload": [
+        "Approved Purchase Order",
+        "Delivery Deadline"
+      ]
+    },
+    {
+      "edge_id": "edge_vendor_to_procurement_status",
+      "source_node_id": "node_vendor_oakline_external",
+      "target_node_id": "node_procurement_internal",
+      "action_type": "status_update",
+      "required_data_payload": [
+        "Shipment Status",
+        "Revised ETA"
+      ]
+    }
+  ],
+  "agent_guardrails": {
+    "delay_handling_protocol": "auto-renegotiate-then-alert",
+    "vendor_data_transparency": "strict_isolation",
+    "communication_tone": "professional_and_concise"
+  }
+}
