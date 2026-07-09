@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from .. import llm, rag
+from .. import gpu_manager, llm, rag
 from ..bus import manager
 from ..config import settings
 from ..database import SessionLocal, get_db
@@ -19,29 +19,51 @@ from ..models import Edge, Message, Node, User, Workspace
 router = APIRouter(prefix="/workspace/{workspace_id}", tags=["agents"])
 
 
-def _agent_reply(node: Node, guardrails: dict, user_message: str, memory_context: str = "") -> str:
+def _pick_target() -> tuple[str, object, object, object]:
+    """Choose where this turn runs. Returns (served_by, base_url, api_key, model);
+    None values mean 'use the default fallback endpoint'. Wakes the GPU in the
+    background when it's cold so the *next* turn can use it."""
+    if gpu_manager.manager.is_ready():
+        gpu_manager.manager.touch()
+        return "amd-mi300x", gpu_manager.manager.target_base_url(), (settings.gpu_api_key or None), settings.gpu_model
+    gpu_manager.manager.request_wake()  # no-op unless GPU management is enabled
+    return "fallback", None, None, None
+
+
+def _agent_reply(node: Node, guardrails: dict, user_message: str, memory_context: str = "") -> tuple[str, str]:
+    """Returns (reply_text, served_by). served_by ∈ {amd-mi300x, fallback, mock}."""
     system = (
         node.agent_system_prompt
         + f"\n\nGuardrails: {guardrails}. Respond concisely as this node's Chief of Staff."
     )
     if memory_context:
         system += "\n\n" + memory_context
-    if settings.llm_enabled:
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user_message}]
+
+    served_by, base_url, api_key, model = _pick_target()
+    if settings.llm_enabled or served_by == "amd-mi300x":
         try:
-            return llm.chat(
-                [{"role": "system", "content": system},
-                 {"role": "user", "content": user_message}],
-                temperature=0.3, max_tokens=600,
+            text = llm.chat(
+                messages, temperature=0.3, max_tokens=600,
+                base_url=base_url, api_key=api_key, model=model,
             ).strip()
+            return text, served_by
         except llm.LLMError as exc:
-            return f"[agent offline: {exc}] Acknowledged: {user_message}"
+            # GPU hiccup → fall back to the always-on endpoint if we have one
+            if served_by == "amd-mi300x" and settings.llm_enabled:
+                try:
+                    return llm.chat(messages, temperature=0.3, max_tokens=600).strip(), "fallback"
+                except llm.LLMError as exc2:
+                    exc = exc2
+            return f"[agent offline: {exc}] Acknowledged: {user_message}", served_by
     # Deterministic offline stub so the demo works without an endpoint.
-    return (
+    stub = (
         f"[{node.name} agent] Acknowledged: '{user_message}'. "
         f"Per my '{node.autonomy_level}' autonomy and the "
         f"'{guardrails.get('delay_handling_protocol', 'auto-renegotiate-then-alert')}' protocol, "
         f"I will update my plan and notify affected neighbours."
     )
+    return stub, "mock"
 
 
 def _rag_answer(db: Session, workspace_id: str, node: Node, guardrails: dict, user_message: str):
@@ -49,12 +71,12 @@ def _rag_answer(db: Session, workspace_id: str, node: Node, guardrails: dict, us
     qvec = rag.embed_query(user_message)
     scored = rag.retrieve(db, workspace_id, node.node_key, qvec)
     context = rag.build_context(scored)
-    reply = _agent_reply(node, guardrails, user_message, context)
+    reply, served_by = _agent_reply(node, guardrails, user_message, context)
     rag.store(db, workspace_id, node.node_key, user_message, reply, qvec)
     used = [
         {"query": r.query, "response": r.response, "score": round(s, 3)} for s, r in scored
     ]
-    return reply, used
+    return reply, used, served_by
 
 
 @router.post("/nodes/{node_key}/agent/invoke")
@@ -78,14 +100,14 @@ async def invoke_agent(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "message is required")
     emit_handoffs = bool(body.get("emit_handoffs", False))
 
-    reply_text, used_memory = await run_in_threadpool(
+    reply_text, used_memory, served_by = await run_in_threadpool(
         _rag_answer, db, workspace_id, node, guardrails, user_message
     )
 
     reply = Message(
         workspace_id=workspace_id, from_node_key=node_key, to_node_key=None,
         action_type="agent_reply", body=reply_text,
-        payload={"prompt": user_message, "used_memory": used_memory},
+        payload={"prompt": user_message, "used_memory": used_memory, "served_by": served_by},
     )
     db.add(reply)
 
@@ -119,7 +141,12 @@ async def invoke_agent(
         db.refresh(m)
         await manager.broadcast(workspace_id, _ser(m))
 
-    return {"reply": _ser(reply), "handoffs": [_ser(m) for m in emitted], "used_memory": used_memory}
+    return {
+        "reply": _ser(reply),
+        "handoffs": [_ser(m) for m in emitted],
+        "used_memory": used_memory,
+        "served_by": served_by,
+    }
 
 
 @router.get("/messages")

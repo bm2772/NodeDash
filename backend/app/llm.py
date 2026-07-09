@@ -47,9 +47,14 @@ def chat(
     max_tokens: int = 2048,
     json_mode: bool = False,
     model: Optional[str] = None,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
 ) -> str:
-    """Single chat completion. Returns the assistant message content (string)."""
-    url = f"{settings.llm_base_url}/chat/completions"
+    """Single chat completion. Returns the assistant message content (string).
+    base_url/api_key/model override the defaults so callers can target a second
+    endpoint (e.g. the on-demand GPU) without a separate client."""
+    base = (base_url or settings.llm_base_url).rstrip("/")
+    url = f"{base}/chat/completions"
     if settings.llm_no_think:
         messages = _apply_no_think(messages)
     payload: dict = {
@@ -62,9 +67,10 @@ def chat(
         # Supported by Fireworks and recent vLLM builds; harmless if ignored.
         payload["response_format"] = {"type": "json_object"}
 
+    key = api_key if api_key is not None else settings.llm_api_key
     headers = {"Content-Type": "application/json"}
-    if settings.llm_api_key:
-        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
 
     try:
         resp = httpx.post(url, json=payload, headers=headers, timeout=settings.llm_timeout)

@@ -11,12 +11,14 @@ from fastapi.responses import JSONResponse
 
 from .config import settings
 from .database import init_db
-from .routers import agents, auth, interview, nodes, workspace
+from .gpu_manager import start_idle_reaper
+from .routers import agents, auth, interview, model, nodes, workspace
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    start_idle_reaper()  # no-op unless GPU_MANAGE is on
     yield
 
 
@@ -44,6 +46,7 @@ app.include_router(auth.router)
 app.include_router(workspace.router)
 app.include_router(nodes.router)
 app.include_router(agents.router)
+app.include_router(model.router)
 
 
 @app.exception_handler(Exception)

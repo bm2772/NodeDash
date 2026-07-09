@@ -3,7 +3,8 @@
 const DEFAULT_BASE = `${location.protocol}//${location.hostname || "localhost"}:8000`;
 
 export function getApiBase() {
-  return localStorage.getItem("nd_api_base") || DEFAULT_BASE;
+  // priority: user override (localStorage) → deploy config (config.js) → local default
+  return localStorage.getItem("nd_api_base") || window.__ND_API_BASE__ || DEFAULT_BASE;
 }
 export function setApiBase(url) {
   localStorage.setItem("nd_api_base", url.replace(/\/+$/, ""));
@@ -46,6 +47,7 @@ async function req(method, path, { body, token, _retries = 2 } = {}) {
 
 export const api = {
   health: () => req("GET", "/health"),
+  modelStatus: () => req("GET", "/model/status"),
 
   // Interview
   questionnaire: () => req("GET", "/interview/questionnaire"),
