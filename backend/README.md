@@ -63,26 +63,55 @@ python smoke_test.py     # 39 checks: interview → graph → node login → sco
 
 ## LLM configuration
 
-Copy `.env.example` → `.env`. `LLM_PROVIDER` is `auto | fireworks | amd | mock`.
+`config.py` auto-loads `backend/.env` (no python-dotenv dep). `LLM_PROVIDER` is
+`auto | fireworks | amd | mock`. One OpenAI-compatible client serves all of them.
 
 ```bash
+# Local (Ollama)
+LLM_PROVIDER=auto
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen3:8b
+LLM_API_KEY=ollama
+
 # Fireworks AI
 LLM_PROVIDER=fireworks
 LLM_BASE_URL=https://api.fireworks.ai/inference/v1
-LLM_MODEL=accounts/fireworks/models/qwen2p5-72b-instruct
+LLM_MODEL=accounts/fireworks/models/qwen3-...
 LLM_API_KEY=fw_...
 
-# AMD cloud (vLLM + ROCm, OpenAI-compatible)
+# AMD MI300X (vLLM + ROCm)
 LLM_PROVIDER=amd
 LLM_BASE_URL=http://<amd-host>:8000/v1
-LLM_MODEL=Qwen/Qwen2.5-32B-Instruct
-LLM_API_KEY=EMPTY
+LLM_MODEL=Qwen/Qwen3-32B
 ```
 
 `auto` uses the endpoint when an API key (or non-default base URL) is set, otherwise
 falls back to the offline `mock` generator. Generation also self-heals: if the LLM
 returns invalid JSON it gets one **repair round** with the exact validation errors,
 then falls back to `mock` so a demo never dies on a flaky model.
+
+**Qwen3 handling:** `<think>…</think>` reasoning is stripped from every completion,
+and `LLM_NO_THINK=true` (default) appends the `/no_think` soft switch — clean, fast
+replies and clean JSON. Harmless for non-Qwen models; set `false` to keep thinking.
+
+## RAG — per-node semantic cache
+
+Each department agent has a memory of past `(query → answer)` pairs. On a new prompt we
+embed it, cosine-match against that node's history, and inject the closest exchanges
+into the agent's context so it stays consistent ([`app/rag.py`](app/rag.py),
+`AgentMemory` in [`app/models.py`](app/models.py)). `/agent/invoke` returns a
+`used_memory` array (matched queries + scores) which the frontend renders as
+*"↳ recalled N past exchanges"*.
+
+```bash
+LLM_EMBED_MODEL=nomic-embed-text   # Ollama; or nomic-ai/nomic-embed-text-v1.5 on Fireworks
+RAG_ENABLED=true
+RAG_TOP_K=3
+RAG_THRESHOLD=0.80                 # min cosine similarity to inject
+```
+
+RAG activates only when an embed model is set **and** an LLM endpoint is live — so in
+`mock` mode it silently no-ops. `python rag_test.py` exercises it end-to-end.
 
 ## API surface
 
@@ -100,14 +129,14 @@ then falls back to `mock` so a demo never dies on a flaky model.
 | GET | `/auth/me` | any | Current token's scope |
 | GET | `/workspace/{id}/nodes/{node_key}` | **node** | The node window: config, neighbours, documents |
 | GET | `/workspace/{id}/nodes/{node_key}/documents` | **node** | Scoped documents |
-| POST | `/workspace/{id}/nodes/{node_key}/agent/invoke` | **node** | Run the node's agent (+ optional edge handoffs) |
+| POST | `/workspace/{id}/nodes/{node_key}/agent/invoke` | **node** | Run the node's agent (+ optional edge handoffs); returns `used_memory` (RAG recall) |
 | GET | `/workspace/{id}/messages` | member | Agent message-bus log |
 | WS | `/workspace/{id}/ws?token=…` | member | Live message-bus feed |
 
 ## Data model
 
-`workspaces · nodes · edges · documents · messages · interview_sessions · users`
-([`app/models.py`](app/models.py)). SQLite by default; set `DATABASE_URL` for Postgres.
+`workspaces · nodes · edges · documents · messages · agent_memories · interview_sessions · users`
+([`app/models.py`](app/models.py)). SQLite by default (WAL mode); set `DATABASE_URL` for Postgres.
 
 ## Notes / next steps
 
