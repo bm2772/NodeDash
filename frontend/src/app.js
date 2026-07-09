@@ -565,7 +565,11 @@ function deptBodyHTML(tab) {
     .join("");
 
   const chatLog = tab.chat
-    .map((m) => `<div class="msg ${esc(m.role)}">${esc(m.text)}</div>`)
+    .map((m) =>
+      m.role === "memory"
+        ? `<div class="msg memory" title="${esc(m.detail || "")}">${esc(m.text)}</div>`
+        : `<div class="msg ${esc(m.role)}">${esc(m.text)}</div>`
+    )
     .join("");
 
   return `
@@ -627,6 +631,13 @@ function wireChat(tab) {
     try {
       const r = await api.invokeAgent(state.workspaceId, tab.node_key, tab.token, text, emit);
       thinking.remove();
+      const mem = r.used_memory || [];
+      if (mem.length) {
+        const label = `↳ recalled ${mem.length} past exchange${mem.length > 1 ? "s" : ""}`;
+        const detail = mem.map((m) => `${Math.round((m.score || 0) * 100)}% · ${m.query}`).join("\n");
+        tab.chat.push({ role: "memory", text: label, detail });
+        log.innerHTML += `<div class="msg memory" title="${esc(detail)}">${esc(label)}</div>`;
+      }
       const reply = r.reply.body;
       tab.chat.push({ role: "agent", text: reply });
       log.innerHTML += `<div class="msg agent">${esc(reply)}</div>`;

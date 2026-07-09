@@ -5,6 +5,7 @@ If no endpoint is configured (settings.llm_enabled is False), callers should use
 the offline mock path instead; this module only handles real HTTP calls.
 """
 import json
+import re
 from typing import Optional
 
 import httpx
@@ -14,6 +15,29 @@ from .config import settings
 
 class LLMError(RuntimeError):
     pass
+
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL | re.IGNORECASE)
+
+
+def _strip_think(text: str) -> str:
+    """Remove Qwen3-style <think>…</think> reasoning blocks from a completion.
+    Also handles an unclosed leading <think> (keeps only the final answer)."""
+    text = _THINK_RE.sub("", text)
+    if "<think>" in text and "</think>" not in text:
+        text = text.split("<think>", 1)[0]
+    return text.strip()
+
+
+def _apply_no_think(messages: list[dict]) -> list[dict]:
+    """Append Qwen3's `/no_think` soft switch to the last user turn to skip the
+    (slow) reasoning phase. Harmless if the model isn't Qwen3-family."""
+    msgs = [dict(m) for m in messages]
+    for m in reversed(msgs):
+        if m.get("role") == "user":
+            m["content"] = f"{m.get('content', '')}\n/no_think".strip()
+            break
+    return msgs
 
 
 def chat(
@@ -26,6 +50,8 @@ def chat(
 ) -> str:
     """Single chat completion. Returns the assistant message content (string)."""
     url = f"{settings.llm_base_url}/chat/completions"
+    if settings.llm_no_think:
+        messages = _apply_no_think(messages)
     payload: dict = {
         "model": model or settings.llm_model,
         "messages": messages,
@@ -50,6 +76,27 @@ def chat(
 
     data = resp.json()
     try:
-        return data["choices"][0]["message"]["content"]
+        return _strip_think(data["choices"][0]["message"]["content"])
     except (KeyError, IndexError) as exc:
         raise LLMError(f"Unexpected LLM response shape: {json.dumps(data)[:500]}") from exc
+
+
+def embed(text: str, *, model: Optional[str] = None) -> list[float]:
+    """Return an embedding vector via the OpenAI-compatible /embeddings endpoint.
+    Works with Fireworks, Ollama, and AMD vLLM embedding models."""
+    url = f"{settings.llm_base_url}/embeddings"
+    payload = {"model": model or settings.llm_embed_model, "input": text}
+    headers = {"Content-Type": "application/json"}
+    if settings.llm_api_key:
+        headers["Authorization"] = f"Bearer {settings.llm_api_key}"
+    try:
+        resp = httpx.post(url, json=payload, headers=headers, timeout=settings.llm_timeout)
+    except httpx.HTTPError as exc:
+        raise LLMError(f"Embedding request failed: {exc}") from exc
+    if resp.status_code >= 400:
+        raise LLMError(f"Embeddings returned {resp.status_code}: {resp.text[:300]}")
+    data = resp.json()
+    try:
+        return data["data"][0]["embedding"]
+    except (KeyError, IndexError) as exc:
+        raise LLMError(f"Unexpected embeddings response: {json.dumps(data)[:300]}") from exc

@@ -119,6 +119,21 @@ class Message(Base):
     created_at = Column(DateTime, default=_now)
 
 
+class AgentMemory(Base):
+    """Semantic cache of past agent Q&A, per node. Retrieved by embedding
+    similarity and injected into the agent's context on similar future queries."""
+
+    __tablename__ = "agent_memories"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    workspace_id = Column(String, ForeignKey("workspaces.id"), nullable=False, index=True)
+    node_key = Column(String, nullable=False, index=True)
+    query = Column(Text, nullable=False)
+    response = Column(Text, nullable=False)
+    embedding = Column(JSON, nullable=False, default=list)  # list[float]
+    created_at = Column(DateTime, default=_now)
+
+
 class InterviewSession(Base):
     """A questionnaire in progress. Answers compile into a Workspace on generate."""
 

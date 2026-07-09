@@ -10,6 +10,22 @@ def _path(env_key: str, default: Path) -> Path:
     return Path(os.getenv(env_key, str(default)))
 
 
+def _load_dotenv(path: Path) -> None:
+    """Minimal .env loader (no python-dotenv dependency). Real environment
+    variables and anything on the command line take precedence via setdefault."""
+    if not path.exists():
+        return
+    for raw in path.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
+
+_load_dotenv(BASE_DIR / ".env")
+
+
 class Settings:
     def __init__(self) -> None:
         # Auth
@@ -42,6 +58,16 @@ class Settings:
             "LLM_MODEL", "accounts/fireworks/models/qwen2p5-72b-instruct"
         )
         self.llm_timeout = float(os.getenv("LLM_TIMEOUT", "60"))
+        # Qwen3 thinks by default (slow, verbose). Append the /no_think soft switch
+        # to disable it for snappy replies. Set false for non-Qwen models.
+        self.llm_no_think = os.getenv("LLM_NO_THINK", "true").lower() in ("1", "true", "yes")
+
+        # Embeddings / RAG (semantic cache of past agent Q&A per node)
+        # e.g. Ollama: "nomic-embed-text"; Fireworks: "nomic-ai/nomic-embed-text-v1.5"
+        self.llm_embed_model = os.getenv("LLM_EMBED_MODEL", "")
+        self.rag_enabled = os.getenv("RAG_ENABLED", "true").lower() in ("1", "true", "yes")
+        self.rag_top_k = int(os.getenv("RAG_TOP_K", "3"))
+        self.rag_threshold = float(os.getenv("RAG_THRESHOLD", "0.80"))
 
         # CORS
         origins = os.getenv("CORS_ORIGINS", "*")
@@ -58,6 +84,11 @@ class Settings:
             return True
         # auto: use the endpoint only if we have an api key or a non-default base url
         return bool(self.llm_api_key) or "fireworks.ai" not in self.llm_base_url
+
+    @property
+    def embeddings_enabled(self) -> bool:
+        """RAG only runs when enabled, an LLM endpoint is live, and an embed model is set."""
+        return self.rag_enabled and self.llm_enabled and bool(self.llm_embed_model)
 
 
 settings = Settings()

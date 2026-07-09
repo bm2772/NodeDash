@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from .. import llm
+from .. import llm, rag
 from ..bus import manager
 from ..config import settings
 from ..database import SessionLocal, get_db
@@ -19,11 +19,13 @@ from ..models import Edge, Message, Node, User, Workspace
 router = APIRouter(prefix="/workspace/{workspace_id}", tags=["agents"])
 
 
-def _agent_reply(node: Node, guardrails: dict, user_message: str) -> str:
+def _agent_reply(node: Node, guardrails: dict, user_message: str, memory_context: str = "") -> str:
     system = (
         node.agent_system_prompt
         + f"\n\nGuardrails: {guardrails}. Respond concisely as this node's Chief of Staff."
     )
+    if memory_context:
+        system += "\n\n" + memory_context
     if settings.llm_enabled:
         try:
             return llm.chat(
@@ -40,6 +42,19 @@ def _agent_reply(node: Node, guardrails: dict, user_message: str) -> str:
         f"'{guardrails.get('delay_handling_protocol', 'auto-renegotiate-then-alert')}' protocol, "
         f"I will update my plan and notify affected neighbours."
     )
+
+
+def _rag_answer(db: Session, workspace_id: str, node: Node, guardrails: dict, user_message: str):
+    """RAG-wrapped agent turn: retrieve similar past exchanges → inject → answer → cache."""
+    qvec = rag.embed_query(user_message)
+    scored = rag.retrieve(db, workspace_id, node.node_key, qvec)
+    context = rag.build_context(scored)
+    reply = _agent_reply(node, guardrails, user_message, context)
+    rag.store(db, workspace_id, node.node_key, user_message, reply, qvec)
+    used = [
+        {"query": r.query, "response": r.response, "score": round(s, 3)} for s, r in scored
+    ]
+    return reply, used
 
 
 @router.post("/nodes/{node_key}/agent/invoke")
@@ -63,11 +78,14 @@ async def invoke_agent(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "message is required")
     emit_handoffs = bool(body.get("emit_handoffs", False))
 
-    reply_text = await run_in_threadpool(_agent_reply, node, guardrails, user_message)
+    reply_text, used_memory = await run_in_threadpool(
+        _rag_answer, db, workspace_id, node, guardrails, user_message
+    )
 
     reply = Message(
         workspace_id=workspace_id, from_node_key=node_key, to_node_key=None,
-        action_type="agent_reply", body=reply_text, payload={"prompt": user_message},
+        action_type="agent_reply", body=reply_text,
+        payload={"prompt": user_message, "used_memory": used_memory},
     )
     db.add(reply)
 
@@ -101,7 +119,7 @@ async def invoke_agent(
         db.refresh(m)
         await manager.broadcast(workspace_id, _ser(m))
 
-    return {"reply": _ser(reply), "handoffs": [_ser(m) for m in emitted]}
+    return {"reply": _ser(reply), "handoffs": [_ser(m) for m in emitted], "used_memory": used_memory}
 
 
 @router.get("/messages")
