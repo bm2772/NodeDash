@@ -1,6 +1,6 @@
-# AgentGraph — Build Lifecycle & Delivery Plan
+# NodeDash — Build Lifecycle & Delivery Plan
 
-*Companion to the AgentGraph concept spec · Version 0.1 — hackathon delivery plan*
+*Companion to the NodeDash concept spec · Version 0.1 — hackathon delivery plan*
 
 ---
 

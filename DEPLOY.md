@@ -19,6 +19,105 @@ destroy-on-idle and recreate-from-snapshot on demand.
 
 ---
 
+## 0. Quick start: run the whole app on the AMD Developer Cloud Jupyter box
+
+For a demo you can run **everything on the AMD GPU box** — model + backend + frontend —
+and expose it with Cloudflare tunnels. These are copy-paste for that box's terminal
+(it's a minimal container, so we fix certs first). Run each block in order.
+
+**0.1 — Fix certificates + system deps** (the container ships without a CA bundle):
+```bash
+apt-get update && apt-get install -y ca-certificates zstd tmux && update-ca-certificates
+```
+If `apt` or `curl` still complains about certificates, add a bypass: `echo insecure >> ~/.curlrc`
+(and for git: prefix commands with `GIT_SSL_NO_VERIFY=true`).
+
+**0.2 — Get the code** (into `/workspace`):
+```bash
+cd /workspace
+git clone https://github.com/bm2772/NodeDash || (cd NodeDash && git pull)
+cd NodeDash
+tmux new -s nodedash        # keeps servers alive after you disconnect (Ctrl-b d to detach)
+```
+
+**0.3 — Model server (Ollama, auto-detects the AMD ROCm GPU):**
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama serve > /tmp/ollama.log 2>&1 &
+sleep 3
+ollama pull qwen3:8b            # or qwen3:32b — the MI300X (192GB) handles it
+ollama pull nomic-embed-text    # embeddings for RAG
+```
+
+**0.4 — Backend (port 8000):**
+```bash
+cd /workspace/NodeDash/backend
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements.txt
+cat > .env <<'EOF'
+LLM_PROVIDER=auto
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_MODEL=qwen3:8b
+LLM_API_KEY=ollama
+LLM_EMBED_MODEL=nomic-embed-text
+LLM_NO_THINK=true
+JWT_SECRET=change-me-to-something-random
+CORS_ORIGINS=*
+EOF
+nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/backend.log 2>&1 &
+sleep 2 && curl -s http://localhost:8000/health      # expect {"status":"ok",...}
+```
+
+**0.5 — Frontend (port 5173):**
+```bash
+cd /workspace/NodeDash/frontend
+nohup python3 -m http.server 5173 > /tmp/frontend.log 2>&1 &
+```
+
+**0.6 — Public URLs via Cloudflare tunnels** (the box's `10.x` IP is private and not
+reachable from your browser). Download the **arch-correct** binary and verify it runs
+(a segfault means the wrong arch or a truncated download):
+```bash
+ARCH=$(uname -m); [ "$ARCH" = "aarch64" ] && CF=cloudflared-linux-arm64 || CF=cloudflared-linux-amd64
+curl -fsSL -o /usr/local/bin/cloudflared "https://github.com/cloudflare/cloudflared/releases/latest/download/$CF"
+chmod +x /usr/local/bin/cloudflared
+cloudflared --version        # MUST print a version, not "Segmentation fault"
+
+# backend tunnel → write its URL into config.js so the UI talks to it
+cloudflared tunnel --url http://localhost:8000 > /tmp/cf-back.log 2>&1 &
+sleep 8
+BACK=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cf-back.log | head -1)
+echo "backend  = $BACK"
+echo "window.__ND_API_BASE__ = \"$BACK\";" > /workspace/NodeDash/frontend/config.js
+
+# frontend tunnel → OPEN THIS URL IN YOUR BROWSER
+cloudflared tunnel --url http://localhost:5173 > /tmp/cf-front.log 2>&1 &
+sleep 8
+echo "frontend = $(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' /tmp/cf-front.log | head -1)"
+```
+
+**0.7 — Open the `frontend` URL from 0.6 in your browser → click ⚡ Quick demo.**
+
+Ports: `11434` Ollama · `8000` backend · `5173` frontend. `CORS_ORIGINS=*` allows the
+cross-tunnel call.
+
+> **Important:** cloudflared assigns a **new random URL every restart**. If you restart
+> the backend tunnel, re-run the `BACK=...` + `echo ... > config.js` line and reload the
+> page. The URL inside `config.js` must always match the current backend tunnel.
+
+**Stop everything:**
+```bash
+pkill -f uvicorn; pkill -f http.server; pkill -f cloudflared; pkill -f "ollama serve"; pkill ollama
+```
+
+**Logs if something fails:** `tail /tmp/backend.log /tmp/ollama.log /tmp/cf-back.log /tmp/cf-front.log`
+
+> This runs the whole stack on the GPU box for a live demo. Sections 1–4 below are the
+> **production** split (frontend on Vercel, always-on backend, on-demand GPU) for a
+> submission URL that isn't tied to a running notebook.
+
+---
+
 ## 1. Frontend → Vercel (static, free, always on)
 
 The frontend is plain static files — no build step.

@@ -1,4 +1,4 @@
-# NodeDash — AgentGraph
+# NodeDash
 
 Turn a short admin interview into a company's **operating graph**: one node per
 department, each rendered as an Obsidian-style dot on a canvas and backed by its own
@@ -11,8 +11,8 @@ OpenAI-compatible, so it runs identically on a **local model (Ollama)**, **Firew
 AI**, or an **AMD MI300X (vLLM + ROCm)** — a one-env-var switch — with an offline
 `mock` mode so nothing blocks on credits or a GPU.
 
-See [AgentGraph-Spec.md](AgentGraph-Spec.md) and
-[AgentGraph-Build-Lifecycle.md](AgentGraph-Build-Lifecycle.md) for the concept.
+See [NodeDash-Spec.md](NodeDash-Spec.md) and
+[NodeDash-Build-Lifecycle.md](NodeDash-Build-Lifecycle.md) for the concept.
 
 ## Layout
 
@@ -97,7 +97,8 @@ there's **no idle GPU cost**:
 - **AMD scoring** → spin up an **MI300X** (AMD Developer Cloud / DO GPU droplet) *only* to record the demo + benchmarks, then shut it down
 
 A raw GPU droplet can't scale to zero (per-hour billing + minutes of cold start), so
-serverless is the "idle→active" model path. See `DEPLOY.md` (todo) for exact steps.
+serverless is the "idle→active" model path. See [DEPLOY.md](DEPLOY.md) for exact steps —
+including **section 0: running the whole stack on the AMD Developer Cloud Jupyter box**.
 
 ## Verify
 

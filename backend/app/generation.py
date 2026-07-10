@@ -84,7 +84,7 @@ def _fill_missing_prompts(spec: dict) -> dict:
 # LLM strategy
 # --------------------------------------------------------------------------- #
 _SYSTEM = (
-    "You are AgentGraph's onboarding compiler. You turn an admin's interview answers "
+    "You are NodeDash's onboarding compiler. You turn an admin's interview answers "
     "into a workspace operating graph. Output ONLY a single JSON object, no prose, no "
     "markdown fences. It must have exactly these top-level keys: workspace, nodes, edges, "
     "agent_guardrails.\n\n"

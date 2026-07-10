@@ -1,6 +1,6 @@
-# NodeDash / AgentGraph — Backend
+# NodeDash — Backend
 
-FastAPI backend for the AgentGraph concept: run the onboarding **questionnaire**,
+FastAPI backend for the NodeDash concept: run the onboarding **questionnaire**,
 compile the answers into a company **operating graph**, and expose **each node as a
 login-gated window** with its own AI Chief-of-Staff agent.
 

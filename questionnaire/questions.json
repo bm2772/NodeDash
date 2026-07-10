@@ -1,5 +1,5 @@
 {
-  "questionnaire_name": "AgentGraph Onboarding Interview",
+  "questionnaire_name": "NodeDash Onboarding Interview",
   "version": "0.1",
   "description": "Guided, adaptive AI interview with the admin. Answers are compiled directly into the workspace graph spec (workspace, nodes, edges, agent_guardrails) — not stored as prose. Capped at 5-8 questions for the MVP; the interviewer asks follow-ups based on prior answers and can pre-fill from ingested data (org-chart CSV, HR export).",
   "output_format": "See schema/graph-spec.schema.json — the compiled output must match the workspace/nodes/edges/agent_guardrails structure.",

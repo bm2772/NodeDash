@@ -23,10 +23,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="NodeDash / AgentGraph API",
+    title="NodeDash API",
     version="0.1.0",
     description=(
-        "Backend for AgentGraph: run the onboarding questionnaire, compile answers "
+        "Backend for NodeDash: run the onboarding questionnaire, compile answers "
         "into a company operating graph, and expose each node as a login-gated window "
         "with its own AI Chief of Staff agent."
     ),

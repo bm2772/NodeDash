@@ -1,4 +1,4 @@
-// Thin fetch wrapper around the NodeDash / AgentGraph FastAPI backend.
+// Thin fetch wrapper around the NodeDash FastAPI backend.
 
 const DEFAULT_BASE = `${location.protocol}//${location.hostname || "localhost"}:8000`;
 

@@ -1,6 +1,6 @@
-# AgentGraph — Concept & Onboarding Specification
+# NodeDash — Concept & Onboarding Specification
 
-*Working title: AgentGraph (alt: NodeSync AI) · Version 0.1 — hackathon spec*
+*Working title: NodeDash (alt: NodeSync AI) · Version 0.1 — hackathon spec*
 
 ---
 

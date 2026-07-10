@@ -1,4 +1,4 @@
-# NodeDash / AgentGraph backend — deliberately light on native deps
+# NodeDash backend — deliberately light on native deps
 fastapi>=0.110
 uvicorn>=0.27
 sqlalchemy>=2.0

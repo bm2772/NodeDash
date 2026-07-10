@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://nodedash.dev/schemas/graph-spec.schema.json",
-  "title": "AgentGraph Workspace Specification",
+  "title": "NodeDash Workspace Specification",
   "description": "The compiled output of the onboarding questionnaire. One object drives the canvas render, the database seeding, and every agent's initialization. Use for constrained decoding and validation so malformed graphs fail loudly.",
   "type": "object",
   "required": ["workspace", "nodes", "edges", "agent_guardrails"],

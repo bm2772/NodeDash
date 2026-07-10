@@ -1,1 +1,1 @@
-"""NodeDash / AgentGraph backend package."""
+"""NodeDash backend package."""
