@@ -85,20 +85,12 @@ Qwen3 notes: its `<think>` reasoning is stripped from replies, and `LLM_NO_THINK
 (default) sends the `/no_think` switch for fast, clean output. `LLM_EMBED_MODEL` enables
 the RAG cache; leave it unset (or use `mock`) to disable RAG cleanly.
 
-## Deploying cost-efficiently (DigitalOcean)
+## Deploying
 
-The FastAPI backend is **not** the GPU — it's a tiny always-on service. Keep it (and the
-static frontend) up cheaply on **DO App Platform**, and make the *model* pay-per-call so
-there's **no idle GPU cost**:
-
-- **Frontend** → App Platform static site (always on, ~free)
-- **Backend** → App Platform service (always on, ~$5/mo, no GPU)
-- **Model** → serverless inference (**DO Gradient** or **Fireworks**) — $0 when idle, active on call
-- **AMD scoring** → spin up an **MI300X** (AMD Developer Cloud / DO GPU droplet) *only* to record the demo + benchmarks, then shut it down
-
-A raw GPU droplet can't scale to zero (per-hour billing + minutes of cold start), so
-serverless is the "idle→active" model path. See [DEPLOY.md](DEPLOY.md) for exact steps —
-including **section 0: running the whole stack on the AMD Developer Cloud Jupyter box**.
+The whole stack — model (Ollama on the AMD ROCm GPU) + backend + frontend — runs on the
+**AMD Developer Cloud** box and is exposed with Cloudflare tunnels. Step-by-step copy-paste
+runbook (certs, Ollama, backend, frontend, tunnels, stop/logs) is in **[DEPLOY.md](DEPLOY.md)**.
+A [Dockerfile](Dockerfile) builds the backend image for a containerized submission.
 
 ## Verify
 

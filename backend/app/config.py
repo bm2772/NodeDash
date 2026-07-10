@@ -69,24 +69,6 @@ class Settings:
         self.rag_top_k = int(os.getenv("RAG_TOP_K", "3"))
         self.rag_threshold = float(os.getenv("RAG_THRESHOLD", "0.80"))
 
-        # On-demand GPU (Option B): the always-on LLM_* above is the instant fallback;
-        # GPU_* is the AMD MI300X (a DigitalOcean GPU Droplet) that wakes on demand.
-        self.gpu_manage = os.getenv("GPU_MANAGE", "false").lower() in ("1", "true", "yes")
-        self.gpu_base_url = os.getenv("GPU_BASE_URL", "").rstrip("/")
-        self.gpu_model = os.getenv("GPU_MODEL", "")
-        self.gpu_api_key = os.getenv("GPU_API_KEY", "")
-        self.gpu_idle_minutes = int(os.getenv("GPU_IDLE_MINUTES", "15"))
-        self.gpu_health_timeout = float(os.getenv("GPU_HEALTH_TIMEOUT", "3"))
-        self.gpu_warm_timeout = float(os.getenv("GPU_WARM_TIMEOUT", "600"))
-        # DigitalOcean droplet lifecycle (AMD Dev Cloud runs on DO)
-        self.do_api_token = os.getenv("DO_API_TOKEN", "")
-        self.do_gpu_snapshot_id = os.getenv("DO_GPU_SNAPSHOT_ID", "")
-        self.do_gpu_size = os.getenv("DO_GPU_SIZE", "gpu-mi300x1-192gb")
-        self.do_region = os.getenv("DO_REGION", "atl1")
-        self.do_gpu_name = os.getenv("DO_GPU_NAME", "nodedash-mi300x")
-        self.do_ssh_key_ids = [s.strip() for s in os.getenv("DO_SSH_KEY_IDS", "").split(",") if s.strip()]
-        self.gpu_vllm_port = int(os.getenv("GPU_VLLM_PORT", "8000"))
-
         # CORS
         origins = os.getenv("CORS_ORIGINS", "*")
         self.cors_origins = ["*"] if origins.strip() == "*" else [
@@ -107,11 +89,6 @@ class Settings:
     def embeddings_enabled(self) -> bool:
         """RAG only runs when enabled, an LLM endpoint is live, and an embed model is set."""
         return self.rag_enabled and self.llm_enabled and bool(self.llm_embed_model)
-
-    @property
-    def gpu_enabled(self) -> bool:
-        """On-demand GPU routing is active only when managed + a target is configured."""
-        return self.gpu_manage and bool(self.gpu_base_url) and bool(self.gpu_model)
 
 
 settings = Settings()

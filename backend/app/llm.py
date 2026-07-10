@@ -51,8 +51,8 @@ def chat(
     api_key: Optional[str] = None,
 ) -> str:
     """Single chat completion. Returns the assistant message content (string).
-    base_url/api_key/model override the defaults so callers can target a second
-    endpoint (e.g. the on-demand GPU) without a separate client."""
+    base_url/api_key/model override the defaults so callers can target a different
+    endpoint without a separate client."""
     base = (base_url or settings.llm_base_url).rstrip("/")
     url = f"{base}/chat/completions"
     if settings.llm_no_think:

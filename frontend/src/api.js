@@ -47,7 +47,6 @@ async function req(method, path, { body, token, _retries = 2 } = {}) {
 
 export const api = {
   health: () => req("GET", "/health"),
-  modelStatus: () => req("GET", "/model/status"),
 
   // Interview
   questionnaire: () => req("GET", "/interview/questionnaire"),

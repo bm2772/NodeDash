@@ -82,7 +82,6 @@ function normalizeGraph(raw) {
 function renderStart() {
   state.fg?.destroy();
   state.fg = null;
-  if (state.modelPollId) { clearInterval(state.modelPollId); state.modelPollId = null; }
   appEl.innerHTML = `
     <div class="center-wrap">
       <div class="card">
@@ -352,30 +351,6 @@ async function doGenerate() {
 // --------------------------------------------------------------------------- //
 // GRAPH view (Obsidian-style)
 // --------------------------------------------------------------------------- //
-function renderModelPill(s) {
-  const el = document.getElementById("model-pill");
-  if (!el) return;
-  if (!s || s.state === "disabled") { el.style.display = "none"; return; }
-  el.style.display = "";
-  const map = {
-    ready: ["ready", `● ${s.gpu_model || "GPU"} · AMD MI300X`, "Serving from the on-demand AMD MI300X"],
-    warming: ["warming", "◌ waking AMD MI300X…", "Spinning up the GPU; using fallback until ready"],
-    off: ["off", `○ fallback · ${s.fallback_model || ""}`, "GPU asleep; answering from the always-on fallback"],
-  };
-  const [cls, text, tip] = map[s.state] || ["off", String(s.state), ""];
-  el.className = "model-pill " + cls;
-  el.textContent = text;
-  el.title = tip;
-}
-
-async function pollModelStatus() {
-  try {
-    renderModelPill(await api.modelStatus());
-  } catch {
-    /* backend not reachable — leave pill as-is */
-  }
-}
-
 function renderGraph() {
   const ws = state.workspace || {};
   appEl.innerHTML = `
@@ -394,7 +369,6 @@ function renderGraph() {
     </div>
     <div class="stage">
       <canvas id="graph-canvas"></canvas>
-      <span id="model-pill" class="model-pill" style="display:none"></span>
       ${state.adminToken ? `
       <div class="admin-controls" style="position:absolute; bottom:20px; right:20px; display:flex; gap:10px; z-index: 10;">
         <button class="primary" id="g-add-node">+ Add Node</button>
@@ -410,11 +384,6 @@ function renderGraph() {
     state.view = "start";
     render();
   };
-
-  // Model backend status pill (on-demand AMD GPU vs always-on fallback)
-  if (state.modelPollId) clearInterval(state.modelPollId);
-  pollModelStatus();
-  state.modelPollId = setInterval(pollModelStatus, 5000);
   
   if (state.adminToken) {
     const an = document.getElementById("g-add-node");
@@ -599,8 +568,6 @@ function deptBodyHTML(tab) {
     .map((m) =>
       m.role === "memory"
         ? `<div class="msg memory" title="${esc(m.detail || "")}">${esc(m.text)}</div>`
-        : m.role === "served"
-        ? `<div class="served-badge">${esc(m.text)}</div>`
         : `<div class="msg ${esc(m.role)}">${esc(m.text)}</div>`
     )
     .join("");
@@ -674,12 +641,6 @@ function wireChat(tab) {
       const reply = r.reply.body;
       tab.chat.push({ role: "agent", text: reply });
       log.innerHTML += `<div class="msg agent">${esc(reply)}</div>`;
-      const sb = r.served_by;
-      if (sb && sb !== "mock") {
-        const label = sb === "amd-mi300x" ? "via AMD MI300X" : "via fallback";
-        tab.chat.push({ role: "served", text: label });
-        log.innerHTML += `<div class="served-badge">${esc(label)}</div>`;
-      }
       (r.handoffs || []).forEach((h) => {
         tab.chat.push({ role: "handoff", text: `↪ ${h.action_type} → ${h.to}` });
         log.innerHTML += `<div class="msg handoff">↪ ${esc(h.action_type)} → ${esc(h.to)}</div>`;
