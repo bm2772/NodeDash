@@ -13,6 +13,12 @@ Your browser ──▶ Cloudflare tunnel ──▶ frontend (:5173, static)
 These blocks are copy-paste for the box's terminal. It's a minimal container, so we fix
 certs first. Run each block in order.
 
+> **Shortcut:** after the one-time setup in steps 1–3 (certs, deps, Ollama installed),
+> **[`run.sh`](run.sh)** automates the rest — start `bash run.sh` and it launches Ollama,
+> the backend, the frontend, both Cloudflare tunnels, writes `config.js`, and prints the
+> URL to open. `bash run.sh stop` tears it all down. The manual steps below are the same
+> thing, spelled out.
+
 ## 1. Certificates + system deps
 
 The container ships without a CA bundle, which breaks `git`/`curl`/`pip`:
