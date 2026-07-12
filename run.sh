@@ -50,19 +50,25 @@ cd "$ROOT/backend"
 # shellcheck disable=SC1091
 . .venv/bin/activate
 log "installing backend deps…"; pip install -q -r requirements.txt
-if [ ! -f .env ]; then
-  log "writing backend/.env…"
-  cat > .env <<EOF
+# Clear any stale exported LLM_* vars so the .env below is authoritative. An exported
+# LLM_PROVIDER=mock (or a leftover Fireworks base URL) otherwise overrides the file and
+# the agents answer with canned mock replies even though Ollama is up.
+unset LLM_PROVIDER LLM_BASE_URL LLM_MODEL LLM_API_KEY LLM_EMBED_MODEL LLM_NO_THINK 2>/dev/null || true
+# (Re)write the LLM config every run so a stale .env can't linger; preserve an existing
+# JWT_SECRET so already-issued tokens keep working across restarts.
+JWT="$(grep -E '^JWT_SECRET=' .env 2>/dev/null | cut -d= -f2-)"
+[ -n "$JWT" ] || JWT="$(python3 -c 'import secrets;print(secrets.token_hex(32))')"
+log "writing backend/.env (points at Ollama on :${OLLAMA_PORT})…"
+cat > .env <<EOF
 LLM_PROVIDER=auto
 LLM_BASE_URL=http://localhost:${OLLAMA_PORT}/v1
 LLM_MODEL=${MODEL}
 LLM_API_KEY=ollama
 LLM_EMBED_MODEL=${EMBED}
 LLM_NO_THINK=true
-JWT_SECRET=$(python3 -c 'import secrets;print(secrets.token_hex(32))')
+JWT_SECRET=${JWT}
 CORS_ORIGINS=*
 EOF
-fi
 log "starting backend on :${BACK_PORT}…"
 nohup uvicorn app.main:app --host 0.0.0.0 --port "${BACK_PORT}" > /tmp/backend.log 2>&1 &
 for _ in $(seq 1 30); do curl -s "http://localhost:${BACK_PORT}/health" >/dev/null 2>&1 && break; sleep 1; done
